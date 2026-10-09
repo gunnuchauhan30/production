@@ -1,0 +1,57 @@
+# Chanda PPC - Production system
+# NOTE: `name: chanda_ppe` fixed hai taaki folder ka naam kuch bhi ho, wahi purana database volume
+# (chanda_ppe_ppe_pgdata) aur wahi network use ho. Ise mat badalna.
+name: chanda_ppe
+
+services:
+  ppe_db:
+    image: postgres:16
+    container_name: chanda_ppe_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chanda_ppe
+      POSTGRES_USER: ppe_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - ppe_pgdata:/var/lib/postgresql/data
+      # Naya (khaali) database banne par yahan ki files number ke order me apne aap chalti hain.
+      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ppe_user -d chanda_ppe"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ppe_backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chanda_ppe_backend
+    restart: unless-stopped
+    depends_on:
+      ppe_db:
+        condition: service_healthy
+    environment:
+      PPE_DATABASE_URL: postgresql://ppe_user:${POSTGRES_PASSWORD}@ppe_db:5432/chanda_ppe
+      PPE_JWT_SECRET: ${PPE_JWT_SECRET}
+    command: ["sh", "-c", "python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8010"]
+    ports:
+      - "8010:8010"
+
+  ppe_frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: chanda_ppe_frontend
+    restart: unless-stopped
+    depends_on:
+      - ppe_backend
+    ports:
+      - "8080:80"
+
+volumes:
+  ppe_pgdata:
