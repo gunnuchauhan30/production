@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
-.
+
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: "\u25A3" },
   { to: "/route-cards", label: "Route Cards", icon: "\u25A4" },
