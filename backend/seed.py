@@ -27,6 +27,7 @@ def seed():
     wait_for_db()
     db = SessionLocal()
     try:
+        first_boot = db.query(PpeUser).count() == 0
         if not db.query(PpeUser).filter(PpeUser.username == "admin").first():
             db.add(PpeUser(
                 username="admin",
