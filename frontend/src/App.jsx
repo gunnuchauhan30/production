@@ -15,6 +15,8 @@ import Stock from "./pages/Stock";
 import MasterData from "./pages/MasterData";
 import PressStock from "./pages/PressStock";
 import Reports from "./pages/Reports";
+import ManageUsers from "./pages/ManageUsers";
+import Settings from "./pages/Settings";
 
 export default function App() {
   return (
@@ -34,6 +36,8 @@ export default function App() {
           <Route path="/stock" element={<ProtectedRoute><Stock /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           <Route path="/master-data" element={<ProtectedRoute><MasterData /></ProtectedRoute>} />
+          <Route path="/users" element={<ProtectedRoute><ManageUsers /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
