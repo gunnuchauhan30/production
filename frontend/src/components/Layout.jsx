@@ -53,6 +53,16 @@ export default function Layout({ children }) {
               Master Data
             </NavLink>
           )}
+          {user?.role === "admin" && (
+  <NavLink to="/users" className={({ isActive }) => (isActive ? "nav-item-active" : "nav-item")}>
+    <span className="text-base">&#9786;</span>
+    Manage Users
+  </NavLink>
+)}
+<NavLink to="/settings" className={({ isActive }) => (isActive ? "nav-item-active" : "nav-item")}>
+  <span className="text-base">&#9776;</span>
+  Settings
+</NavLink>
         </nav>
         <div className="px-4 py-4 border-t border-black/5">
           <div className="text-sm font-medium">{user?.full_name || user?.username}</div>
