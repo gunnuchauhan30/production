@@ -8,7 +8,7 @@ processes never talk to each other.)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import auth, route_cards, production, production_log, oee, pdi, dispatch, schedule, master_data, stock, press_stock, reports
+from .routers import auth, route_cards, production, production_log, oee, pdi, dispatch, schedule, master_data, stock, press_stock, reports, users
 
 app = FastAPI(
     title="Chanda PPC — Production Planning & Control",
@@ -26,6 +26,8 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(users.account_router)
 app.include_router(route_cards.router)
 app.include_router(production.router)
 app.include_router(production_log.router)
