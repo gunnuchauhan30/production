@@ -24,10 +24,12 @@ def _enum_values(enum_cls):
 
 
 class PpeRole(str, enum.Enum):
+    operation = "operation"
+    production = "production"
     planning = "planning"
-    operator = "operator"
-    qa = "qa"
     dispatch = "dispatch"
+    accounts = "accounts"
+    qa = "qa"
     admin = "admin"
 
 
