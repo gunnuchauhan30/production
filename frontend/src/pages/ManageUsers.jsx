@@ -4,9 +4,10 @@ import Badge from "../components/Badge";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
-const ROLES = ["planning", "operator", "qa", "dispatch", "admin"];
+// Shown until the real list arrives from the backend (GET /users/roles).
+const FALLBACK_ROLES = ["operation", "production", "planning", "dispatch", "accounts", "qa", "admin"];
 
-const emptyForm = { full_name: "", username: "", password: "", role: "operator" };
+const emptyForm = { full_name: "", username: "", password: "", role: "operation" };
 
 // FastAPI returns detail as a string for our own errors and as a list for validation errors.
 const errText = (err, fallback) => {
@@ -21,6 +22,7 @@ export default function ManageUsers() {
   const isAdmin = me?.role === "admin";
 
   const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState(FALLBACK_ROLES);
   const [form, setForm] = useState(emptyForm);
   const [showPw, setShowPw] = useState(false);
   const [msg, setMsg] = useState(null); // { type: "ok" | "error", text }
@@ -36,7 +38,10 @@ export default function ManageUsers() {
   };
 
   useEffect(() => {
-    if (isAdmin) load();
+    if (isAdmin) {
+      load();
+      api.get("/users/roles").then((r) => setRoles(r.data)).catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
@@ -147,7 +152,7 @@ export default function ManageUsers() {
           <div>
             <label className="label">Role *</label>
             <select name="role" className="input" value={form.role} onChange={handleChange}>
-              {ROLES.map((r) => (
+              {roles.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
@@ -190,7 +195,7 @@ export default function ManageUsers() {
                       disabled={self}
                       onChange={(e) => update(u, { role: e.target.value }, `Role of ${u.username} changed to ${e.target.value}.`)}
                     >
-                      {ROLES.map((r) => (
+                      {roles.map((r) => (
                         <option key={r} value={r}>
                           {r}
                         </option>
