@@ -18,7 +18,6 @@ const shortDay = (ym, day) => {
   const [y, m] = ym.split("-").map(Number);
   return `${day} ${new Date(y, m - 1, day).toLocaleString("en-US", { month: "short" })}`;
 };
-const partLabel = (p) => (p.part_name ? `${p.part_name} ${p.part_number}` : p.part_number);
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // Calendar cells for a month ("2026-10"), plus holiday / working-day counts.
@@ -46,6 +45,7 @@ export default function CustomerSchedule() {
 
   const [rows, setRows] = useState([]);
   const [parts, setParts] = useState([]);
+  const [bomItems, setBomItems] = useState([]);
   const [form, setForm] = useState({ customer: "", part_number: "", qty: "", month: thisMonth() });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -73,6 +73,7 @@ export default function CustomerSchedule() {
   useEffect(() => {
     load();
     api.get("/master-data/parts").then((r) => setParts(r.data)).catch(() => setParts([]));
+    api.get("/master-data/bom-items").then((r) => setBomItems(r.data)).catch(() => setBomItems([]));
   }, []);
 
   useEffect(() => {
@@ -134,9 +135,11 @@ export default function CustomerSchedule() {
     }
   };
 
+  // Same as the Master Data page: parts that have a BOM, shown as "<part name> <part no.>".
+  const partNumbers = useMemo(() => [...new Set(bomItems.map((b) => b.part_number))].sort(), [bomItems]);
   const partName = (partNumber) => {
-    const p = parts.find((x) => x.part_number === partNumber);
-    return p ? partLabel(p) : partNumber;
+    const name = parts.find((p) => p.part_number === partNumber)?.part_name;
+    return name ? `${name} ${partNumber}` : partNumber;
   };
 
   return (
@@ -156,9 +159,9 @@ export default function CustomerSchedule() {
             <label className="label">Part Name</label>
             <select name="part_number" className="input" value={form.part_number} onChange={handleChange} required>
               <option value="">Select...</option>
-              {parts.map((p) => (
-                <option key={p.part_number} value={p.part_number}>
-                  {partLabel(p)}
+              {partNumbers.map((pn) => (
+                <option key={pn} value={pn}>
+                  {partName(pn)}
                 </option>
               ))}
             </select>
