@@ -9,15 +9,52 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import get_db, engine
 from ..auth import get_current_user, require_role, hash_password, verify_password
 from ..models import PpeUser, PpeRole
 
-router = APIRouter(prefix="/users", tags=["users"])
+
+def ensure_role_enum() -> None:
+    """Keep the Postgres enum `ppe_role_enum` in step with the PpeRole list in models.py.
+
+    - the old role 'operator' is renamed to 'operation' (existing users keep their role)
+    - every other role in PpeRole that the database does not know yet is added
+    Runs at every start and does nothing once the enum is up to date, so the same
+    code works on a local database and on Railway with no manual SQL.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    if "operation" not in PpeRole.__members__:
+        return  # models.py still has the old role list - do nothing until it is updated
+    try:
+        with engine.connect() as raw:
+            conn = raw.execution_options(isolation_level="AUTOCOMMIT")  # ALTER TYPE ... ADD VALUE needs this
+            labels = [
+                row[0]
+                for row in conn.execute(
+                    text(
+                        "SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid "
+                        "WHERE t.typname = 'ppe_role_enum'"
+                    )
+                )
+            ]
+            if not labels:
+                return
+            if "operator" in labels and "operation" not in labels:
+                conn.execute(text("ALTER TYPE ppe_role_enum RENAME VALUE 'operator' TO 'operation'"))
+                labels = ["operation" if label == "operator" else label for label in labels]
+            for role in PpeRole:
+                if role.value not in labels:
+                    conn.execute(text(f"ALTER TYPE ppe_role_enum ADD VALUE IF NOT EXISTS '{role.value}'"))
+    except Exception as exc:  # never stop the app from starting because of this
+        print(f"[users] could not update the role list in the database: {exc}")
+
+
+router = APIRouter(prefix="/users", tags=["users"], on_startup=[ensure_role_enum])
 account_router = APIRouter(prefix="/account", tags=["account"])
 
 MIN_PASSWORD_LEN = 8
