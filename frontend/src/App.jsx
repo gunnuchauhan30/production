@@ -25,15 +25,15 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/route-cards" element={<ProtectedRoute><RouteCards /></ProtectedRoute>} />
+          {/* <Route path="/route-cards" element={<ProtectedRoute><RouteCards /></ProtectedRoute>} /> */}
           <Route path="/production" element={<ProtectedRoute><ProductionEntry /></ProtectedRoute>} />
           <Route path="/production-report" element={<ProtectedRoute><ProductionReport /></ProtectedRoute>} />
           <Route path="/oee" element={<ProtectedRoute><OeeReport /></ProtectedRoute>} />
           <Route path="/press-stock" element={<ProtectedRoute><PressStock /></ProtectedRoute>} />
-          <Route path="/pdi" element={<ProtectedRoute><PdiChecklist /></ProtectedRoute>} />
+          {/* <Route path="/pdi" element={<ProtectedRoute><PdiChecklist /></ProtectedRoute>} /> */}
           <Route path="/finished-goods" element={<ProtectedRoute><FinishedGoodsDispatch /></ProtectedRoute>} />
           <Route path="/schedule" element={<ProtectedRoute><CustomerSchedule /></ProtectedRoute>} />
-          <Route path="/stock" element={<ProtectedRoute><Stock /></ProtectedRoute>} />
+          {/* <Route path="/stock" element={<ProtectedRoute><Stock /></ProtectedRoute>} /> */}
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           <Route path="/master-data" element={<ProtectedRoute><MasterData /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute><ManageUsers /></ProtectedRoute>} />
