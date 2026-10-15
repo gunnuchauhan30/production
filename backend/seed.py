@@ -42,7 +42,7 @@ def seed():
                 username="operator1",
                 password_hash=hash_password("operator123"),
                 full_name="Shop Floor Operator",
-                role=PpeRole.operator,
+                role=PpeRole.operation,
             ))
             print("[seed] Created user: operator1 / operator123")
 
