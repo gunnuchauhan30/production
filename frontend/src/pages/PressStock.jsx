@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
 import api from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 // Press Strokes — Operator Daily Strokes (automatic, built from Production
 // Log entries where line = "Press Shop"). One row per operator, one column
@@ -29,20 +30,30 @@ const isSunday = (ym, day) => {
 const fmtTime = (t) => (t ? t.slice(0, 5) : "—");
 
 export default function PressStock() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [month, setMonth] = useState(monthStr());
   const [logEntries, setLogEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null); // { operator, day }
+  const [msg, setMsg] = useState(null); // { type: "ok" | "error", text }
 
   const load = async (ym) => {
     setLoading(true);
     try {
-      const from = `${ym}-01`;
-      const to = `${ym}-${String(daysInMonth(ym)).padStart(2, "0")}`;
-      const res = await api.get("/production-log/entries", {
-        params: { line: "Press Shop", date_from: from, date_to: to },
-      });
-      setLogEntries(res.data);
+      // A week per request, so a busy month never hits the 500-entry limit of one request.
+      const n = daysInMonth(ym);
+      const pad = (d) => String(d).padStart(2, "0");
+      const ranges = [];
+      for (let start = 1; start <= n; start += 7) ranges.push([start, Math.min(start + 6, n)]);
+      const results = await Promise.all(
+        ranges.map(([a, b]) =>
+          api.get("/production-log/entries", {
+            params: { line: "Press Shop", date_from: `${ym}-${pad(a)}`, date_to: `${ym}-${pad(b)}` },
+          })
+        )
+      );
+      setLogEntries(results.flatMap((r) => r.data));
     } catch {
       setLogEntries([]);
     } finally {
@@ -106,12 +117,54 @@ export default function PressStock() {
     setSelected({ operator: op, day: d });
   };
 
+  // Admin only. The server keeps a copy of every deleted entry (production_log_deleted).
+  const deleteEntries = async (ids, confirmText, doneText) => {
+    if (!window.confirm(confirmText)) return;
+    setMsg(null);
+    try {
+      const res = await api.post("/production-log/entries/bulk-delete", { ids });
+      setMsg({ type: "ok", text: `${doneText} (${res.data.deleted} ${res.data.deleted === 1 ? "entry" : "entries"}).` });
+      await load(month);
+    } catch (err) {
+      const d = err.response?.data?.detail;
+      setMsg({ type: "error", text: typeof d === "string" ? d : "Could not delete." });
+      await load(month);
+    }
+  };
+
+  const deleteOne = (e) =>
+    deleteEntries(
+      [e.id],
+      `Delete this entry?\n\n${e.operator_name || "-"} | ${e.entry_date} | ${e.part_number} ${e.operation_name} | ${e.produced_qty ?? e.ok_qty ?? 0} strokes`,
+      "Entry deleted"
+    );
+
+  const deleteAllOf = (op) => {
+    const mine = logEntries.filter((e) => (e.operator_name || "—") === op);
+    const strokes = mine.reduce((sum, e) => sum + Number(e.produced_qty ?? e.ok_qty ?? 0), 0);
+    deleteEntries(
+      mine.map((e) => e.id),
+      `Delete ALL ${mine.length} entries of "${op}" in ${monthLabel(month)}?\n\nTotal strokes removed: ${strokes}`,
+      `All entries of ${op} deleted`
+    );
+  };
+
+  // When the last entry of the opened day is deleted, close the breakdown panel.
+  useEffect(() => {
+    if (selected && detailRows.length === 0) setSelected(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logEntries]);
+
   return (
     <Layout>
       <h1 className="text-xl font-semibold mb-1">Press Strokes — Operator Daily Strokes</h1>
       <p className="text-sm text-ink-soft mb-5">
         Built automatically from Production Logs (Line = Press Shop) — nothing to enter here, just log entries in Production Logs. Click any day's number to see the time-slot breakdown.
       </p>
+
+      {msg && (
+        <div className={`card mb-4 text-sm ${msg.type === "ok" ? "text-success" : "text-danger"}`}>{msg.text}</div>
+      )}
 
       <div className="card overflow-x-auto mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
@@ -135,6 +188,7 @@ export default function PressStock() {
               )}
               <th className="text-center font-semibold">Total</th>
               <th className="text-center font-semibold">Average</th>
+              {isAdmin && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -164,6 +218,13 @@ export default function PressStock() {
                 })}
                 <td className="text-center font-semibold">{rowTotal(op)}</td>
                 <td className="text-center font-semibold">{rowAvg(op)}</td>
+                {isAdmin && (
+                  <td>
+                    <button type="button" className="btn-danger text-xs whitespace-nowrap" onClick={() => deleteAllOf(op)}>
+                      Delete all
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {operators.length > 0 && (
@@ -178,6 +239,7 @@ export default function PressStock() {
                 )}
                 <td className="text-center font-semibold">{grandTotal}</td>
                 <td className="text-center font-semibold">{grandAvg}</td>
+                {isAdmin && <td />}
               </tr>
             )}
             {!loading && operators.length === 0 && (
@@ -191,6 +253,7 @@ export default function PressStock() {
         </table>
         <p className="text-xs text-ink-soft mt-3">
           Average = Total ÷ number of days that operator has strokes logged. Bottom Average = Grand Total ÷ days with any entry.
+          {isAdmin && " Admin: use Delete all to remove an operator's entries for this month, or open a day and delete single entries."}
         </p>
       </div>
 
@@ -214,6 +277,7 @@ export default function PressStock() {
                 <th>Item</th>
                 <th>Machine</th>
                 <th className="text-center">Strokes</th>
+                {isAdmin && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -226,6 +290,13 @@ export default function PressStock() {
                   <td>{e.bom_item_name || "—"}</td>
                   <td>{e.machine_no || "—"}</td>
                   <td className="text-center font-medium">{e.produced_qty ?? e.ok_qty ?? "—"}</td>
+                  {isAdmin && (
+                    <td>
+                      <button type="button" className="btn-danger text-xs" onClick={() => deleteOne(e)}>
+                        Delete
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               <tr className="border-t-2">
@@ -233,6 +304,7 @@ export default function PressStock() {
                 <td className="text-center font-semibold">
                   {detailRows.reduce((s, e) => s + Number(e.produced_qty ?? e.ok_qty ?? 0), 0)}
                 </td>
+                {isAdmin && <td />}
               </tr>
             </tbody>
           </table>
