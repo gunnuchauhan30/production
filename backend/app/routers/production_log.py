@@ -23,15 +23,20 @@ save time:
                    as 0% rather than left blank, matching that sheet.
   - Quality      = OK Qty / Produced Qty
   - OEE          = Availability x Performance x Quality
+
+Deleting: an admin can delete entries from the Press Strokes page. Every deleted entry is
+first copied (as JSON) into the `production_log_deleted` table, so nothing is lost for good.
 """
 from datetime import date, time
 from decimal import Decimal, InvalidOperation
 from typing import List, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..auth import get_current_user
+from ..auth import get_current_user, require_role
 from .. import models, schemas
 
 router = APIRouter(prefix="/production-log", tags=["production-log"])
@@ -282,3 +287,56 @@ def operator_summary(
         })
     out.sort(key=lambda r: (r["avg_oee"] or 0), reverse=True)
     return out
+
+
+# ------------------------------------------------------------------ delete (admin only)
+class EntryIds(BaseModel):
+    ids: List[int]
+
+
+_ARCHIVE_DDL = """
+CREATE TABLE IF NOT EXISTS production_log_deleted (
+    id          SERIAL PRIMARY KEY,
+    original_id INTEGER,
+    deleted_at  TIMESTAMPTZ DEFAULT now(),
+    deleted_by  INTEGER,
+    row_data    JSONB
+)
+"""
+
+
+@router.post("/entries/bulk-delete")
+def bulk_delete_entries(
+    payload: EntryIds,
+    db: Session = Depends(get_db),
+    admin=Depends(require_role("admin")),
+):
+    """Delete production-log entries by id (admin only). The rows are copied into
+    `production_log_deleted` first, in the same transaction."""
+    ids = sorted(set(payload.ids))
+    if not ids:
+        raise HTTPException(400, "No entries selected")
+    if len(ids) > 500:
+        raise HTTPException(400, "Too many entries at once (max 500)")
+
+    found = [
+        row[0]
+        for row in db.query(models.ProductionLogEntry.id).filter(models.ProductionLogEntry.id.in_(ids)).all()
+    ]
+    if not found:
+        raise HTTPException(404, "Those entries no longer exist")
+
+    if db.get_bind().dialect.name == "postgresql":
+        table = models.ProductionLogEntry.__tablename__
+        db.execute(text(_ARCHIVE_DDL))
+        db.execute(
+            text(
+                "INSERT INTO production_log_deleted (original_id, deleted_by, row_data) "
+                f"SELECT e.id, :uid, to_jsonb(e) FROM {table} e WHERE e.id = ANY(:ids)"
+            ),
+            {"uid": admin.id, "ids": found},
+        )
+    db.query(models.ProductionLogEntry).filter(models.ProductionLogEntry.id.in_(found)).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": len(found)}
+
