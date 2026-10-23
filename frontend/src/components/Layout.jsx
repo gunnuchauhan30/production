@@ -4,15 +4,15 @@ import { useAuth } from "../context/AuthContext";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: "\u25A3" },
-  // { to: "/route-cards", label: "Route Cards", icon: "\u25A4" },
+  { to: "/route-cards", label: "Route Cards", icon: "\u25A4" },
   { to: "/production", label: "Production Logs", icon: "\u2699" },
   { to: "/production-report", label: "Production Report", icon: "\u25A9" },
   { to: "/oee", label: "OEE Report", icon: "\u25CE" },
   { to: "/press-stock", label: "Press Strokes", icon: "\u25C9" },
-  // { to: "/pdi", label: "PDI Checklist", icon: "\u2713" },
+  { to: "/pdi", label: "PDI Checklist", icon: "\u2713" },
   { to: "/finished-goods", label: "Finished Goods & Dispatch", icon: "\u25A6" },
   { to: "/schedule", label: "Customer Schedule", icon: "\u2317" },
-  // { to: "/stock", label: "Stock & Shortage", icon: "\u25B3" },
+  { to: "/stock", label: "Stock & Shortage", icon: "\u25B3" },
   { to: "/reports", label: "Reports", icon: "\u25A7" },
 ];
 
