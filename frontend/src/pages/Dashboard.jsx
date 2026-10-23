@@ -7,31 +7,18 @@ import api from "../api/client";
 
 export default function Dashboard() {
   const [routeCards, setRouteCards] = useState([]);
-  const [shortageCount, setShortageCount] = useState(0);
-  const [pendingPdi, setPendingPdi] = useState(0);
   const [delayedDispatch, setDelayedDispatch] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [rcRes, shortageRes, dispatchRes] = await Promise.all([
+        const [rcRes, dispatchRes] = await Promise.all([
           api.get("/route-cards"),
-          api.get("/stock/shortage"),
           api.get("/dispatch", { params: { status_filter: "delayed" } }),
         ]);
         setRouteCards(rcRes.data);
-        setShortageCount(shortageRes.data.length);
         setDelayedDispatch(dispatchRes.data.length);
-
-        // Pending PDI = route cards without a final-stage pass yet (rough client-side estimate)
-        let pending = 0;
-        for (const rc of rcRes.data.slice(0, 20)) {
-          const pdiRes = await api.get("/pdi-checks", { params: { route_card_id: rc.id } });
-          const hasFinal = pdiRes.data.some((p) => p.stage === "final" && p.result === "pass");
-          if (!hasFinal) pending += 1;
-        }
-        setPendingPdi(pending);
       } catch (e) {
         console.error(e);
       } finally {
@@ -44,11 +31,9 @@ export default function Dashboard() {
     <Layout>
       <h1 className="text-xl font-semibold mb-5">Production Dashboard</h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <StatCard label="Route Cards" value={routeCards.length} delay={0} />
-        <StatCard label="Pending PDI" value={pendingPdi} tone="warning" delay={0.05} />
-        <StatCard label="Materials Short" value={shortageCount} tone="danger" delay={0.1} />
-        <StatCard label="Delayed Dispatches" value={delayedDispatch} tone="danger" delay={0.15} />
+        <StatCard label="Delayed Dispatches" value={delayedDispatch} tone="danger" delay={0.05} />
       </div>
 
       <motion.div className="card" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
