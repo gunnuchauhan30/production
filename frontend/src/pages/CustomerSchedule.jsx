@@ -146,7 +146,7 @@ export default function CustomerSchedule() {
     <Layout>
       <h1 className="text-xl font-semibold mb-1">Customer Schedule</h1>
       <p className="text-sm text-ink-soft mb-5">
-        Monthly planning - check Stock &amp; Shortage before committing to a schedule.
+        Monthly planning - schedule per customer, part and month.
       </p>
 
       <motion.form onSubmit={handleSubmit} className="card mb-6" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
