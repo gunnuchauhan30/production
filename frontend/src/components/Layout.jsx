@@ -4,7 +4,6 @@ import { useAuth } from "../context/AuthContext";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: "\u25A3" },
-  { to: "/route-cards", label: "Route Cards", icon: "\u25A4" },
   { to: "/production", label: "Production Logs", icon: "\u2699" },
   { to: "/production-report", label: "Production Report", icon: "\u25A9" },
   { to: "/oee", label: "OEE Report", icon: "\u25CE" },
