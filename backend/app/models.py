@@ -323,6 +323,7 @@ class ProductionLogEntry(Base):
     part_number     = Column(String(80), nullable=False)
     bom_item_name   = Column(String(100))   # which BOM item (e.g. "Tube", "Housing Pipe") -- disambiguates
                                              # operation names that repeat across a part's items
+    route_card_id   = Column(Integer, ForeignKey("route_cards.id"), nullable=True)   # optional Job Card this entry belongs to
     entry_date      = Column(Date, nullable=False)
     shift           = Column(String(10))
     machine_no      = Column(String(30))
@@ -357,4 +358,3 @@ class ProductionLogEntry(Base):
 
     entry_by        = Column(Integer, ForeignKey("ppe_users.id"))
     created_at      = Column(DateTime, server_default=func.now())
-
