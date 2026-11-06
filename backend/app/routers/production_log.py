@@ -191,6 +191,15 @@ def add_entry(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if payload.route_card_id is not None:
+        rc = db.query(models.RouteCard).get(payload.route_card_id)
+        if not rc:
+            raise HTTPException(status_code=400, detail="Selected Job Card was not found")
+        if (rc.part_number or "").strip().lower() != (payload.part_number or "").strip().lower():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job Card {rc.job_card_no} is for part '{rc.part_number}', not '{payload.part_number}'",
+            )
     data = payload.model_dump(exclude={"unplanned_down_time_min"})
     computed = _compute_oee_fields(payload, db)
     row = models.ProductionLogEntry(
@@ -339,4 +348,3 @@ def bulk_delete_entries(
     db.query(models.ProductionLogEntry).filter(models.ProductionLogEntry.id.in_(found)).delete(synchronize_session=False)
     db.commit()
     return {"deleted": len(found)}
-
