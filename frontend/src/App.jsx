@@ -23,7 +23,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          {/* <Route path="/route-cards" element={<ProtectedRoute><RouteCards /></ProtectedRoute>} /> */}
+          <Route path="/route-cards" element={<ProtectedRoute><RouteCards /></ProtectedRoute>} />
           <Route path="/production" element={<ProtectedRoute><ProductionEntry /></ProtectedRoute>} />
           <Route path="/production-report" element={<ProtectedRoute><ProductionReport /></ProtectedRoute>} />
           <Route path="/oee" element={<ProtectedRoute><OeeReport /></ProtectedRoute>} />
