@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ProductionEntry from "./pages/ProductionEntry";
 import ProductionReport from "./pages/ProductionReport";
+import RouteCard from "./pages/RouteCard";
 import OeeReport from "./pages/OeeReport";
 import FinishedGoodsDispatch from "./pages/FinishedGoodsDispatch";
 import CustomerSchedule from "./pages/CustomerSchedule";
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/production" element={<ProtectedRoute><ProductionEntry /></ProtectedRoute>} />
+          <Route path="/route-card" element={<ProtectedRoute><RouteCard /></ProtectedRoute>} />
           <Route path="/production-report" element={<ProtectedRoute><ProductionReport /></ProtectedRoute>} />
           <Route path="/oee" element={<ProtectedRoute><OeeReport /></ProtectedRoute>} />
           <Route path="/press-stock" element={<ProtectedRoute><PressStock /></ProtectedRoute>} />
