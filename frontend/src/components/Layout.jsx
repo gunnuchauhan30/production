@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: "\u25A3" },
   { to: "/production", label: "Production Logs", icon: "\u2699" },
   { to: "/production-report", label: "Production Report", icon: "\u25A9" },
+  { to: "/route-card", label: "Route Card", icon: "\u25A4" },
   { to: "/oee", label: "OEE Report", icon: "\u25CE" },
   { to: "/press-stock", label: "Press Strokes", icon: "\u25C9" },
   { to: "/finished-goods", label: "Finished Goods & Dispatch", icon: "\u25A6" },
