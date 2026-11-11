@@ -19,7 +19,7 @@ const emptyForm = {
   line: "",
   part_number: "",
   bom_item_name: "",
-  route_card_id: "",
+  job_card_no: "",
   entry_date: todayStr(),
   machine_no: "",
   operation_name: "",
@@ -43,8 +43,7 @@ export default function ProductionEntry() {
   const [reasons, setReasons] = useState([]);
   const [downReasons, setDownReasons] = useState([]);
   const [items, setItems] = useState([]);
-  const [partCards, setPartCards] = useState([]);   // Job Cards of the selected part
-  const [cardMap, setCardMap] = useState({});        // id -> Job Card No, for the Recent Entries table
+  const [storeCards, setStoreCards] = useState([]);   // Job Cards pulled from the Store
   const [operations, setOperations] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [entries, setEntries] = useState([]);
@@ -61,9 +60,9 @@ export default function ProductionEntry() {
     api.get("/master-data/rejection-reasons").then((r) => setReasons(r.data));
     api.get("/master-data/down-time-reasons").then((r) => setDownReasons(r.data));
     api
-      .get("/route-cards")
-      .then((r) => setCardMap(Object.fromEntries(r.data.map((c) => [c.id, c.job_card_no]))))
-      .catch(() => setCardMap({}));
+      .get("/store/job-cards", { params: { limit: 200 } })
+      .then((r) => setStoreCards(r.data.cards || []))
+      .catch(() => setStoreCards([]));
     loadEntries();
   }, []);
 
@@ -71,21 +70,9 @@ export default function ProductionEntry() {
 
   const handlePartChange = async (e) => {
     const partNumber = e.target.value;
-    setForm({ ...form, part_number: partNumber, bom_item_name: "", operation_name: "", route_card_id: "" });
+    setForm({ ...form, part_number: partNumber, bom_item_name: "", operation_name: "" });
     setOperations([]);
-    setPartCards([]);
     if (!partNumber) return setItems([]);
-    try {
-      const cardRes = await api.get("/route-cards", { params: { part_number: partNumber } });
-      setPartCards(cardRes.data);
-      setCardMap((m) => ({ ...m, ...Object.fromEntries(cardRes.data.map((c) => [c.id, c.job_card_no])) }));
-      // Only one Job Card for this part: pick it for the operator.
-      if (cardRes.data.length === 1) {
-        setForm((f) => ({ ...f, route_card_id: String(cardRes.data[0].id) }));
-      }
-    } catch {
-      setPartCards([]);
-    }
     try {
       const res = await api.get(`/production-log/parts/${encodeURIComponent(partNumber)}/items`);
       setItems(res.data);
@@ -117,7 +104,7 @@ export default function ProductionEntry() {
         line: form.line,
         part_number: form.part_number,
         bom_item_name: form.bom_item_name || null,
-        route_card_id: form.route_card_id ? Number(form.route_card_id) : null,
+        job_card_no: form.job_card_no.trim() || null,
         entry_date: form.entry_date,
         machine_no: form.machine_no || null,
         operation_name: form.operation_name,
@@ -133,7 +120,7 @@ export default function ProductionEntry() {
         down_time_reason: form.down_time_reason || null,
       };
       await api.post("/production-log/entries", payload);
-      setForm({ ...emptyForm, line: form.line, part_number: form.part_number, bom_item_name: form.bom_item_name, route_card_id: form.route_card_id });
+      setForm({ ...emptyForm, line: form.line, part_number: form.part_number, bom_item_name: form.bom_item_name, job_card_no: form.job_card_no });
       await loadEntries();
     } catch (err) {
       setError(err.response?.data?.detail || "Could not save the entry.");
@@ -174,16 +161,28 @@ export default function ProductionEntry() {
           </div>
           <div>
             <label className="label">Job Card No. (optional)</label>
-            <select name="route_card_id" className="input" value={form.route_card_id} onChange={handleChange} disabled={!form.part_number}>
-              <option value="">
-                {form.part_number ? (partCards.length ? "No Job Card" : "No Job Card for this part") : "Pick a part first"}
-              </option>
-              {partCards.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.job_card_no} · {Number(c.issued_qty)} issued
+            <input
+              name="job_card_no"
+              className="input"
+              list="job-card-suggestions"
+              placeholder="Pick from Store list or type"
+              maxLength={50}
+              autoComplete="off"
+              value={form.job_card_no}
+              onChange={handleChange}
+            />
+            <datalist id="job-card-suggestions">
+              {storeCards.map((c) => (
+                <option key={c.job_card_no} value={c.job_card_no}>
+                  {[c.material, c.issued_qty != null ? `${Number(c.issued_qty)} ${c.uom || ""}`.trim() : null].filter(Boolean).join(" · ")}
                 </option>
               ))}
-            </select>
+              {[...new Set(entries.map((e) => e.job_card_no).filter(Boolean))]
+                .filter((j) => !storeCards.some((c) => c.job_card_no.toLowerCase() === j.toLowerCase()))
+                .map((j) => (
+                  <option key={j} value={j} />
+                ))}
+            </datalist>
           </div>
           <div>
             <label className="label">Item</label>
@@ -318,7 +317,7 @@ export default function ProductionEntry() {
                 <td>{e.entry_date}</td>
                 <td>{e.line}</td>
                 <td>{e.part_number}</td>
-                <td>{e.route_card_id ? cardMap[e.route_card_id] || "—" : "—"}</td>
+                <td>{e.job_card_no || "—"}</td>
                 <td>{e.bom_item_name || "—"}</td>
                 <td>{e.operation_name}</td>
                 <td>{e.machine_no || "—"}</td>
