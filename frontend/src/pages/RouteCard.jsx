@@ -203,7 +203,7 @@ export default function RouteCard() {
       {!data.configured && (
         <div className="card mb-5 text-sm">
           The Store is not connected yet. In Railway, open the PPC backend service → Variables and add <b>STORE_USERNAME</b> and{" "}
-          <b>STORE_PASSWORD</b> (a Store user made for this, e.g. ppc_sync). Job Cards then appear here within a minute.
+          <b>STORE_PASSWORD</b> (a Store user made for this, e.g. ppc_sync). Job Cards then appear here by themselves within a few minutes.
         </div>
       )}
       {data.sync_error && <div className="card mb-5 text-sm text-danger">Store sync problem: {data.sync_error}</div>}
