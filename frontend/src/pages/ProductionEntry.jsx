@@ -40,8 +40,6 @@ const pct = (v) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 
 export default function ProductionEntry() {
   const [parts, setParts] = useState([]);
-  const [reasons, setReasons] = useState([]);
-  const [downReasons, setDownReasons] = useState([]);
   const [items, setItems] = useState([]);
   const [storeCards, setStoreCards] = useState([]);   // Job Cards pulled from the Store
   const [operations, setOperations] = useState([]);
@@ -57,8 +55,6 @@ export default function ProductionEntry() {
 
   useEffect(() => {
     api.get("/master-data/parts").then((r) => setParts(r.data));
-    api.get("/master-data/rejection-reasons").then((r) => setReasons(r.data));
-    api.get("/master-data/down-time-reasons").then((r) => setDownReasons(r.data));
     api
       .get("/store/job-cards", { params: { limit: 200 } })
       .then((r) => setStoreCards(r.data.cards || []))
@@ -115,9 +111,9 @@ export default function ProductionEntry() {
         produced_qty: form.produced_qty === "" ? null : Number(form.produced_qty),
         ok_qty: form.ok_qty === "" ? null : Number(form.ok_qty),
         ng_qty: form.ng_qty === "" ? null : Number(form.ng_qty),
-        rejection_reason: form.rejection_reason || null,
+        rejection_reason: form.rejection_reason.trim() || null,
         unplanned_down_time_min: form.unplanned_down_time_min === "" ? null : Number(form.unplanned_down_time_min),
-        down_time_reason: form.down_time_reason || null,
+        down_time_reason: form.down_time_reason.trim() || null,
       };
       await api.post("/production-log/entries", payload);
       setForm({ ...emptyForm, line: form.line, part_number: form.part_number, bom_item_name: form.bom_item_name, job_card_no: form.job_card_no });
@@ -244,15 +240,15 @@ export default function ProductionEntry() {
           </div>
           <div>
             <label className="label">Reason for Rejection</label>
-            <select name="rejection_reason" className="input" value={form.rejection_reason} onChange={handleChange}>
-              <option value="">—</option>
-              {reasons.map((r) => (
-                <option key={r.id} value={r.reason}>
-                  {r.reason}
-                  {r.category ? ` (${r.category})` : ""}
-                </option>
-              ))}
-            </select>
+            <input
+              name="rejection_reason"
+              className="input"
+              placeholder="Type the reason (optional)"
+              maxLength={150}
+              autoComplete="off"
+              value={form.rejection_reason}
+              onChange={handleChange}
+            />
           </div>
           <div>
             <label className="label">Unplanned Breakdown (min)</label>
@@ -260,14 +256,15 @@ export default function ProductionEntry() {
           </div>
           <div>
             <label className="label">Down Time Reason</label>
-            <select name="down_time_reason" className="input" value={form.down_time_reason} onChange={handleChange}>
-              <option value="">—</option>
-              {downReasons.map((r) => (
-                <option key={r.id} value={r.reason}>
-                  {r.reason}
-                </option>
-              ))}
-            </select>
+            <input
+              name="down_time_reason"
+              className="input"
+              placeholder="Type the reason (optional)"
+              maxLength={150}
+              autoComplete="off"
+              value={form.down_time_reason}
+              onChange={handleChange}
+            />
           </div>
         </div>
 
