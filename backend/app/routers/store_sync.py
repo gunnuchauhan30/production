@@ -12,6 +12,8 @@ Settings (Railway -> PPC backend service -> Variables)
   STORE_USERNAME   login of a Store user made only for this link (e.g. ppc_sync)
   STORE_PASSWORD   its password
   STORE_API_URL    optional, default https://store.chandaenterprises.in/api/v1
+  STORE_SYNC_MINUTES  optional, default 5. How often PPC asks the Store for new Job Cards by
+                      itself, even when nobody has a page open. 0 turns the timer off.
 
 The Store login is rate limited (10 per minute), so a sync logs in once and syncs are at
 most one every 15 seconds.
@@ -71,10 +73,34 @@ def ensure_store_tables() -> None:
         print(f"[store_sync] could not create store_issues: {exc}")
 
 
-router = APIRouter(prefix="/store", tags=["store"], on_startup=[ensure_store_tables])
-
 _lock = threading.Lock()
 _last_attempt = 0.0
+_last_error: Optional[str] = None    # message of the latest failed sync, None after a good one
+
+
+def start_background_sync() -> None:
+    """Asks the Store for new Job Cards every few minutes, by itself."""
+    try:
+        minutes = float(os.getenv("STORE_SYNC_MINUTES", "5"))
+    except ValueError:
+        minutes = 5.0
+    if minutes <= 0:
+        return
+
+    def loop():
+        time.sleep(20)  # let the app finish starting first
+        while True:
+            try:
+                if is_configured():
+                    _attempt_sync()
+            except Exception as exc:  # the timer must never die
+                print(f"[store_sync] background sync error: {exc}")
+            time.sleep(max(60.0, minutes * 60.0))
+
+    threading.Thread(target=loop, daemon=True, name="store-sync").start()
+
+
+router = APIRouter(prefix="/store", tags=["store"], on_startup=[ensure_store_tables, start_background_sync])
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +178,7 @@ def sync_from_store() -> int:
     except RuntimeError:
         uom = {}
     issues = _paged(base, "/issues", token)
+    complete = len(issues) < 40 * 500       # False only if we stopped at the page limit
     rows = []
     for i in issues:
         jc = (i.get("job_card_no") or "").strip() or None
@@ -175,6 +202,11 @@ def sync_from_store() -> int:
     if rows:
         with engine.begin() as conn:
             conn.execute(_UPSERT, rows)
+            if complete:
+                # Issues removed in the Store disappear here too. The Store sent us everything,
+                # so anything we hold that it did not send no longer exists there.
+                conn.execute(text("DELETE FROM store_issues WHERE NOT (store_issue_id = ANY(:ids))"),
+                             {"ids": [r["store_issue_id"] for r in rows]})
     return len(rows)
 
 
@@ -184,13 +216,10 @@ def _seconds_since_sync(db: Session) -> float:
     )).scalar())
 
 
-def _sync_if_stale(db: Session, force: bool = False) -> Optional[str]:
-    """Returns an error message, or None when fine / nothing to do."""
-    global _last_attempt
-    if not is_configured():
-        return None
-    if not force and _seconds_since_sync(db) < STALE_AFTER_SECONDS:
-        return None
+def _attempt_sync() -> Optional[str]:
+    """One guarded sync (never two at once, never more often than MIN_GAP_SECONDS).
+    Returns an error message, or None when it worked / was skipped."""
+    global _last_attempt, _last_error
     if time.time() - _last_attempt < MIN_GAP_SECONDS:
         return None
     if not _lock.acquire(blocking=False):
@@ -198,11 +227,22 @@ def _sync_if_stale(db: Session, force: bool = False) -> Optional[str]:
     try:
         _last_attempt = time.time()
         sync_from_store()
+        _last_error = None
         return None
     except Exception as exc:
-        return str(exc)
+        _last_error = str(exc)
+        return _last_error
     finally:
         _lock.release()
+
+
+def _sync_if_stale(db: Session) -> Optional[str]:
+    """Used when a page asks for the list. Returns an error message or None."""
+    if not is_configured():
+        return None
+    if _seconds_since_sync(db) < STALE_AFTER_SECONDS:
+        return _last_error
+    return _attempt_sync() or _last_error
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +252,7 @@ def _sync_if_stale(db: Session, force: bool = False) -> Optional[str]:
 def sync_now(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     if not is_configured():
         raise HTTPException(status_code=400, detail="Store connection is not set up yet. Add STORE_USERNAME and STORE_PASSWORD in Railway.")
-    global _last_attempt
+    global _last_attempt, _last_error
     if time.time() - _last_attempt < MIN_GAP_SECONDS:
         raise HTTPException(status_code=429, detail="Synced a moment ago. Try again in a few seconds.")
     if not _lock.acquire(blocking=False):
@@ -220,7 +260,9 @@ def sync_now(db: Session = Depends(get_db), current_user=Depends(get_current_use
     try:
         _last_attempt = time.time()
         count = sync_from_store()
+        _last_error = None
     except Exception as exc:
+        _last_error = str(exc)
         raise HTTPException(status_code=502, detail=str(exc))
     finally:
         _lock.release()
