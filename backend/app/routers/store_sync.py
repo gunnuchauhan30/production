@@ -18,6 +18,7 @@ Settings (Railway -> PPC backend service -> Variables)
 The Store login is rate limited (10 per minute), so a sync logs in once and syncs are at
 most one every 15 seconds.
 """
+import functools
 import json
 import os
 import threading
@@ -69,8 +70,26 @@ def ensure_store_tables() -> None:
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS idx_store_issues_jc ON store_issues (upper(trim(job_card_no)))"
             ))
+            # The Job Card No typed/picked on a Production Log entry. Created here too so the Route Card
+            # page works even if the column has not been added yet by another part of the app.
+            conn.execute(text(
+                "ALTER TABLE production_log_entries ADD COLUMN IF NOT EXISTS job_card_no VARCHAR(50)"
+            ))
     except Exception as exc:  # never stop the app from starting
         print(f"[store_sync] could not create store_issues: {exc}")
+
+
+def _json_errors(fn):
+    """Turns an unexpected crash into a readable message the page can show, instead of a bare 500."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"{fn.__name__} failed: {type(exc).__name__}: {str(exc)[:200]}")
+    return wrapper
 
 
 _lock = threading.Lock()
@@ -270,6 +289,7 @@ def sync_now(db: Session = Depends(get_db), current_user=Depends(get_current_use
 
 
 @router.get("/job-cards")
+@_json_errors
 def list_job_cards(
     q: Optional[str] = None,
     limit: int = Query(300, ge=1, le=1000),
@@ -315,6 +335,7 @@ def _num(v):
 
 
 @router.get("/job-cards/{job_card_no}")
+@_json_errors
 def get_job_card(job_card_no: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     """The Route Card: Store header + operation table filled from Production Logs entries."""
     jc = job_card_no.strip()
@@ -331,7 +352,7 @@ def get_job_card(job_card_no: str, db: Session = Depends(get_db), current_user=D
 
     entries = (
         db.query(models.ProductionLogEntry)
-        .filter(func.upper(func.trim(models.ProductionLogEntry.job_card_no)) == jc.upper())
+        .filter(text("upper(trim(production_log_entries.job_card_no)) = :jc").bindparams(jc=jc.upper()))
         .order_by(models.ProductionLogEntry.entry_date, models.ProductionLogEntry.id)
         .all()
     )
