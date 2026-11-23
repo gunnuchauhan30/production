@@ -75,7 +75,7 @@ export default function ProductionReport() {
   );
 
   const withOee = entries.filter((e) => e.oee != null);
-  const avgOee = withOee.length ? withOee.reduce((s, e) => s + e.oee, 0) / withOee.length : null;
+  const avgOee = withOee.length ? withOee.reduce((s, e) => s + Number(e.oee), 0) / withOee.length : null;
 
   return (
     <Layout>
@@ -136,6 +136,7 @@ export default function ProductionReport() {
               <th>Date</th>
               <th>Line</th>
               <th>Part</th>
+              <th>Job Card</th>
               <th>Item</th>
               <th>Operation</th>
               <th>Machine No.</th>
@@ -163,6 +164,7 @@ export default function ProductionReport() {
                 <td>{e.entry_date}</td>
                 <td>{e.line}</td>
                 <td>{e.part_number}</td>
+                <td>{e.job_card_no || "—"}</td>
                 <td>{e.bom_item_name || "—"}</td>
                 <td>{e.operation_name}</td>
                 <td>{e.machine_no || "—"}</td>
