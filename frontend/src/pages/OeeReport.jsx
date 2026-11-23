@@ -129,10 +129,10 @@ export default function OeeReport() {
   const isPressShop = line === "Press Shop";
 
   const withOee = entries.filter((e) => e.oee != null);
-  const avgOee = withOee.length ? withOee.reduce((s, e) => s + e.oee, 0) / withOee.length : null;
-  const avgAvail = withOee.length ? withOee.reduce((s, e) => s + (e.availability || 0), 0) / withOee.length : null;
-  const avgPerf = withOee.length ? withOee.reduce((s, e) => s + (e.performance || 0), 0) / withOee.length : null;
-  const avgQual = withOee.length ? withOee.reduce((s, e) => s + (e.quality || 0), 0) / withOee.length : null;
+  const avgOee = withOee.length ? withOee.reduce((s, e) => s + Number(e.oee), 0) / withOee.length : null;
+  const avgAvail = withOee.length ? withOee.reduce((s, e) => s + Number(e.availability || 0), 0) / withOee.length : null;
+  const avgPerf = withOee.length ? withOee.reduce((s, e) => s + Number(e.performance || 0), 0) / withOee.length : null;
+  const avgQual = withOee.length ? withOee.reduce((s, e) => s + Number(e.quality || 0), 0) / withOee.length : null;
 
   const totalStrokes = entries.reduce((s, e) => s + Number(e.produced_qty || e.ok_qty || 0), 0);
   const totalPlannedStrokes = entries.reduce((s, e) => s + Number(e.planned_qty || 0), 0);
