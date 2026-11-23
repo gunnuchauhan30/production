@@ -168,7 +168,10 @@ export default function RouteCard() {
       const res = await api.get("/store/job-cards", { params: search ? { q: search } : {} });
       setData(res.data);
     } catch (err) {
-      setMessage(err.response?.data?.detail || "Could not load the Job Cards.");
+      setMessage(
+        err.response?.data?.detail ||
+          (err.response ? `Could not load the Job Cards (server error ${err.response.status}).` : "Could not reach the PPC server.")
+      );
     } finally {
       setLoading(false);
     }
