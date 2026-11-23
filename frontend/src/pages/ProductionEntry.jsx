@@ -41,6 +41,7 @@ const pct = (v) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 export default function ProductionEntry() {
   const [parts, setParts] = useState([]);
   const [items, setItems] = useState([]);
+  const [notice, setNotice] = useState("");           // green confirmation after a save
   const [storeCards, setStoreCards] = useState([]);   // Job Cards pulled from the Store
   const [operations, setOperations] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -94,6 +95,7 @@ export default function ProductionEntry() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setNotice("");
     setSaving(true);
     try {
       const payload = {
@@ -115,7 +117,14 @@ export default function ProductionEntry() {
         unplanned_down_time_min: form.unplanned_down_time_min === "" ? null : Number(form.unplanned_down_time_min),
         down_time_reason: form.down_time_reason.trim() || null,
       };
-      await api.post("/production-log/entries", payload);
+      const res = await api.post("/production-log/entries", payload);
+      const saved = res.data || {};
+      if (payload.job_card_no && !saved.job_card_no) {
+        // The server did not keep the Job Card No: it is running an older version.
+        setError("The entry was saved, but its Job Card No. was NOT stored. The server needs the latest update. Tell the person who maintains the software.");
+      } else {
+        setNotice(saved.job_card_no ? `Saved. Attached to Job Card ${saved.job_card_no}.` : "Saved (no Job Card attached).");
+      }
       setForm({ ...emptyForm, line: form.line, part_number: form.part_number, bom_item_name: form.bom_item_name, job_card_no: form.job_card_no });
       await loadEntries();
     } catch (err) {
@@ -279,7 +288,13 @@ export default function ProductionEntry() {
           </div>
         </div>
 
+        {form.start_time && form.end_time && form.end_time <= form.start_time && (
+          <div className="text-sm text-danger mt-3">
+            End time is not later than Start time, so Total, Availability, Performance and OEE will stay blank for this entry. (An entry cannot cross midnight.)
+          </div>
+        )}
         {error && <div className="text-sm text-danger mt-3">{error}</div>}
+        {notice && !error && <div className="text-sm text-success mt-3">{notice}</div>}
         <button type="submit" disabled={saving} className="btn-primary mt-4">
           {saving ? "Saving…" : "Save Entry"}
         </button>
