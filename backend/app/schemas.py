@@ -379,7 +379,8 @@ class ProductionLogEntryCreate(BaseModel):
     line: str                       # "Tube" | "Fabrication" | "Press Shop"
     part_number: str
     bom_item_name: Optional[str] = None   # which BOM item (Tube, Housing Pipe, etc.)
-    route_card_id: Optional[int] = None   # optional: Job Card this entry is attached to
+    route_card_id: Optional[int] = None   # (not used by the form any more)
+    job_card_no: Optional[str] = None     # optional: Job Card No typed by the operator
     entry_date: date
     shift: Optional[str] = None
     machine_no: Optional[str] = None
