@@ -33,6 +33,12 @@ def ensure_route_card_link() -> None:
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS idx_prod_log_route_card ON production_log_entries(route_card_id)"
             ))
+            conn.execute(text(
+                "ALTER TABLE production_log_entries ADD COLUMN IF NOT EXISTS job_card_no VARCHAR(50)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_prod_log_job_card_no ON production_log_entries(job_card_no)"
+            ))
     except Exception as exc:  # never stop the app from starting because of this
         print(f"[route_cards] could not add the Job Card link column: {exc}")
 
