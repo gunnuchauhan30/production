@@ -191,6 +191,8 @@ def add_entry(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if payload.job_card_no is not None:
+        payload.job_card_no = payload.job_card_no.strip()[:50] or None
     if payload.route_card_id is not None:
         rc = db.query(models.RouteCard).get(payload.route_card_id)
         if not rc:
@@ -348,3 +350,4 @@ def bulk_delete_entries(
     db.query(models.ProductionLogEntry).filter(models.ProductionLogEntry.id.in_(found)).delete(synchronize_session=False)
     db.commit()
     return {"deleted": len(found)}
+
