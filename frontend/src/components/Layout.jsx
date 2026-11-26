@@ -73,7 +73,7 @@ export default function Layout({ children }) {
 
       <div className="ml-[280px] flex-1 flex flex-col min-h-screen">
         <header className="sticky top-0 z-10 bg-white/70 backdrop-blur-md border-b border-black/5 px-6 py-3.5">
-          <div className="text-xs text-ink-soft">Standalone system — zero connection to Store</div>
+          <div className="text-xs text-ink-soft">PPC — production planning (reads Job Cards from the Store)</div>
         </header>
         <motion.main
           className="flex-1 p-6"
