@@ -27,9 +27,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from typing import Optional
+from datetime import date
+from decimal import Decimal
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -69,6 +72,27 @@ def ensure_store_tables() -> None:
             """))
             conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS idx_store_issues_jc ON store_issues (upper(trim(job_card_no)))"
+            ))
+            for col in ("required_qty NUMERIC(14,3)", "issued_by_name VARCHAR(100)", "supplier_name VARCHAR(255)",
+                        "tc_no VARCHAR(255)", "batch_no VARCHAR(255)", "supplier_checked_at TIMESTAMP"):
+                conn.execute(text(f"ALTER TABLE store_issues ADD COLUMN IF NOT EXISTS {col}"))
+            # Handover / Store Receiving / Despatch rows of the paper Route Card, kept per Job Card No.
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS job_card_lines (
+                    id          SERIAL PRIMARY KEY,
+                    job_card_no VARCHAR(50) NOT NULL,
+                    section     VARCHAR(20) NOT NULL,
+                    line_date   DATE,
+                    name        VARCHAR(255),
+                    qty         NUMERIC(14,3),
+                    remarks     VARCHAR(255),
+                    extra       VARCHAR(255),
+                    created_by  VARCHAR(100),
+                    created_at  TIMESTAMP DEFAULT now()
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_job_card_lines_jc ON job_card_lines (upper(trim(job_card_no)), section)"
             ))
             # The Job Card No typed/picked on a Production Log entry. Created here too so the Route Card
             # page works even if the column has not been added yet by another part of the app.
@@ -172,17 +196,18 @@ def _paged(base: str, path: str, token: str):
 _UPSERT = text("""
     INSERT INTO store_issues
         (store_issue_id, job_card_no, issue_no, material_code, material_name, uom, lot_no, part_number,
-         department, shift, issue_qty, consumed_qty, issue_date, approval_status, synced_at)
+         department, shift, issue_qty, consumed_qty, issue_date, approval_status, required_qty, issued_by_name, synced_at)
     VALUES
         (:store_issue_id, :job_card_no, :issue_no, :material_code, :material_name, :uom, :lot_no, :part_number,
-         :department, :shift, :issue_qty, :consumed_qty, :issue_date, :approval_status, now())
+         :department, :shift, :issue_qty, :consumed_qty, :issue_date, :approval_status, :required_qty, :issued_by_name, now())
     ON CONFLICT (store_issue_id) DO UPDATE SET
         job_card_no = EXCLUDED.job_card_no, issue_no = EXCLUDED.issue_no,
         material_code = EXCLUDED.material_code, material_name = EXCLUDED.material_name,
         uom = EXCLUDED.uom, lot_no = EXCLUDED.lot_no, part_number = EXCLUDED.part_number,
         department = EXCLUDED.department, shift = EXCLUDED.shift, issue_qty = EXCLUDED.issue_qty,
         consumed_qty = EXCLUDED.consumed_qty, issue_date = EXCLUDED.issue_date,
-        approval_status = EXCLUDED.approval_status, synced_at = now()
+        approval_status = EXCLUDED.approval_status, required_qty = EXCLUDED.required_qty,
+        issued_by_name = EXCLUDED.issued_by_name, synced_at = now()
 """)
 
 
@@ -217,6 +242,8 @@ def sync_from_store() -> int:
             "consumed_qty": i.get("consumed_qty"),
             "issue_date": i.get("issue_date"),
             "approval_status": i.get("accounts_approval_status") or "pending",
+            "required_qty": i.get("required_qty"),
+            "issued_by_name": i.get("issued_by_name"),
         })
     if rows:
         with engine.begin() as conn:
@@ -262,6 +289,58 @@ def _sync_if_stale(db: Session) -> Optional[str]:
     if _seconds_since_sync(db) < STALE_AFTER_SECONDS:
         return _last_error
     return _attempt_sync() or _last_error
+
+
+_token = {"value": None, "at": 0.0}
+
+
+def _store_get(path: str):
+    """GET on the Store API with a cached login token (renewed when it expires)."""
+    base, user, pwd = _config()
+    if not (user and pwd):
+        raise RuntimeError("Store connection is not set up")
+
+    def login():
+        _token["value"] = _call("POST", f"{base}/auth/login", form={"username": user, "password": pwd})["access_token"]
+        _token["at"] = time.time()
+
+    if not _token["value"] or time.time() - _token["at"] > 20 * 60:
+        login()
+    try:
+        return _call("GET", f"{base}{path}", _token["value"])
+    except RuntimeError as exc:
+        if "answered 401" not in str(exc):
+            raise
+        login()
+        return _call("GET", f"{base}{path}", _token["value"])
+
+
+def _fill_supplier_details(db: Session, jc: str) -> None:
+    """Supplier / TC No / batch for a card come from the Store per issue (only known once the
+    Store has drawn the stock). Fetched when a card is opened, a few at a time, then kept."""
+    if not is_configured():
+        return
+    ids = [r[0] for r in db.execute(text("""
+        SELECT store_issue_id FROM store_issues
+        WHERE upper(trim(job_card_no)) = upper(trim(:jc)) AND supplier_name IS NULL
+          AND (supplier_checked_at IS NULL OR supplier_checked_at < now() - interval '10 minutes')
+        ORDER BY store_issue_id LIMIT 5
+    """), {"jc": jc})]
+    for issue_id in ids:
+        try:
+            data = _store_get(f"/issues/{issue_id}/fifo-source")
+        except Exception:
+            return  # Store not reachable right now; try again next time the card is opened
+        alloc = data.get("allocation") or [] if isinstance(data, dict) else []
+        suppliers = [a.get("supplier_name") for a in alloc if a.get("supplier_name")]
+        tcs = [a.get("tc_no") for a in alloc if a.get("tc_no")]
+        batches = [a.get("batch_no") for a in alloc if a.get("batch_no")]
+        uniq = lambda xs: ", ".join(dict.fromkeys(xs)) or None
+        db.execute(text("""
+            UPDATE store_issues SET supplier_name = :s, tc_no = :t, batch_no = :b, supplier_checked_at = now()
+            WHERE store_issue_id = :id
+        """), {"s": uniq(suppliers), "t": uniq(tcs), "b": uniq(batches), "id": issue_id})
+        db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -339,8 +418,13 @@ def _num(v):
 def get_job_card(job_card_no: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     """The Route Card: Store header + operation table filled from Production Logs entries."""
     jc = job_card_no.strip()
+    _fill_supplier_details(db, jc)
     head = db.execute(text("""
         SELECT count(*) AS n, sum(issue_qty) AS issued_qty, max(uom) AS uom,
+               sum(required_qty) AS required_qty, max(issued_by_name) AS issued_by,
+               string_agg(DISTINCT supplier_name, ' / ') AS supplier,
+               string_agg(DISTINCT tc_no, ', ') AS tc_no,
+               string_agg(DISTINCT batch_no, ', ') AS batch_no,
                string_agg(DISTINCT material_name, ' / ') AS material,
                string_agg(DISTINCT lot_no, ', ') AS lots,
                max(part_number) AS store_part, max(department) AS department,
@@ -412,6 +496,11 @@ def get_job_card(job_card_no: str, db: Session = Depends(get_db), current_user=D
         "job_card_no": jc,
         "in_store": head["n"] > 0,
         "issued_qty": head["issued_qty"],
+        "required_qty": head["required_qty"],
+        "issued_by": head["issued_by"],
+        "supplier": head["supplier"],
+        "tc_no": head["tc_no"],
+        "batch_no": head["batch_no"],
         "uom": head["uom"],
         "material": head["material"],
         "lots": head["lots"],
@@ -426,4 +515,83 @@ def get_job_card(job_card_no: str, db: Session = Depends(get_db), current_user=D
         "total_ng": sum(s["ng"] for s in steps),
         "last_step_name": steps[-1]["operation_name"] if steps else None,
         "last_step_ok": steps[-1]["ok"] if steps else 0,
+        "lines": _load_lines(db, jc),
+        "can_delete_lines": _role_name(current_user) in LINE_DELETE_ROLES,
     }
+
+
+# ---------------------------------------------------------------------------
+# Handover / Store Receiving / Despatch rows of the Route Card
+# ---------------------------------------------------------------------------
+LINE_DELETE_ROLES = {"admin", "production", "planning", "dispatch"}
+
+
+def _role_name(user) -> str:
+    return str(getattr(user.role, "value", user.role))
+
+
+def _load_lines(db: Session, jc: str) -> dict:
+    rows = db.execute(text("""
+        SELECT id, section, line_date, name, qty, remarks, extra, created_by
+        FROM job_card_lines WHERE upper(trim(job_card_no)) = upper(trim(:jc)) ORDER BY id
+    """), {"jc": jc}).mappings().all()
+    out = {"handover": [], "receiving": [], "dispatch": []}
+    running = 0.0
+    for r in rows:
+        item = dict(r)
+        if item["section"] == "dispatch":
+            running += _num(item["qty"])
+            item["cumm_total"] = running      # running total of Bill Qty, as on the paper card
+        if item["section"] in out:
+            out[item["section"]].append(item)
+    return out
+
+
+class LineIn(BaseModel):
+    section: Literal["handover", "receiving", "dispatch"]
+    name: Optional[str] = None
+    line_date: Optional[date] = None
+    qty: Optional[Decimal] = None
+    remarks: Optional[str] = None
+    extra: Optional[str] = None
+
+
+def _clean(v: Optional[str], n: int = 255) -> Optional[str]:
+    return (v or "").strip()[:n] or None
+
+
+@router.post("/job-cards/{job_card_no}/lines", status_code=201)
+@_json_errors
+def add_line(job_card_no: str, payload: LineIn, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    jc = job_card_no.strip()
+    if not jc:
+        raise HTTPException(status_code=400, detail="Job Card No is missing")
+    name, remarks, extra = _clean(payload.name), _clean(payload.remarks), _clean(payload.extra)
+    if payload.qty is not None and payload.qty < 0:
+        raise HTTPException(status_code=400, detail="Quantity cannot be negative")
+    if payload.section == "dispatch" and not extra:
+        raise HTTPException(status_code=400, detail="Invoice No is required")
+    if payload.section != "dispatch" and not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    who = getattr(current_user, "full_name", None) or current_user.username
+    new_id = db.execute(text("""
+        INSERT INTO job_card_lines (job_card_no, section, line_date, name, qty, remarks, extra, created_by)
+        VALUES (:jc, :section, :d, :name, :qty, :remarks, :extra, :who) RETURNING id
+    """), {"jc": jc, "section": payload.section, "d": payload.line_date, "name": name, "qty": payload.qty,
+           "remarks": remarks, "extra": extra, "who": who}).scalar()
+    db.commit()
+    return {"id": new_id}
+
+
+@router.delete("/job-cards/{job_card_no}/lines/{line_id}")
+@_json_errors
+def delete_line(job_card_no: str, line_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    if _role_name(current_user) not in LINE_DELETE_ROLES:
+        raise HTTPException(status_code=403, detail="Your role cannot delete these rows")
+    res = db.execute(text("""
+        DELETE FROM job_card_lines WHERE id = :id AND upper(trim(job_card_no)) = upper(trim(:jc))
+    """), {"id": line_id, "jc": job_card_no.strip()})
+    db.commit()
+    if res.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Row not found")
+    return {"deleted": line_id}
