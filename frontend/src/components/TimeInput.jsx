@@ -11,6 +11,13 @@ export function fmtTime(t) {
   return `${h % 12 || 12}:${mm.slice(0, 2)} ${h >= 12 ? "PM" : "AM"}`;
 }
 
+// End time for tables: marks a night shift that ended the next day.
+export function fmtEndTime(start, end) {
+  if (!end) return "\u2014";
+  const next = start && String(end).slice(0, 5) < String(start).slice(0, 5);
+  return next ? `${fmtTime(end)} (next day)` : fmtTime(end);
+}
+
 const to24 = (h12, m, ap) => {
   const h = Number(h12);
   const h24 = ap === "AM" ? (h === 12 ? 0 : h) : h === 12 ? 12 : h + 12;
