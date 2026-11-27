@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Layout from "../components/Layout";
+import TimeInput, { fmtTime } from "../components/TimeInput";
 import api from "../api/client";
 
 const LINES = ["Tube", "Fabrication", "Press Shop"];
@@ -96,6 +97,10 @@ export default function ProductionEntry() {
     e.preventDefault();
     setError("");
     setNotice("");
+    if (!form.start_time || !form.end_time) {
+      setError("Pick the Start and End time: hour, minute and AM/PM.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -225,11 +230,11 @@ export default function ProductionEntry() {
           </div>
           <div>
             <label className="label">Operation Start Time</label>
-            <input name="start_time" type="time" className="input" value={form.start_time} onChange={handleChange} required />
+            <TimeInput value={form.start_time} onChange={(v) => setForm((f) => ({ ...f, start_time: v }))} />
           </div>
           <div>
             <label className="label">Operation End Time</label>
-            <input name="end_time" type="time" className="input" value={form.end_time} onChange={handleChange} required />
+            <TimeInput value={form.end_time} onChange={(v) => setForm((f) => ({ ...f, end_time: v }))} />
           </div>
           <div>
             <label className="label">Planned Qty</label>
@@ -290,7 +295,7 @@ export default function ProductionEntry() {
 
         {form.start_time && form.end_time && form.end_time <= form.start_time && (
           <div className="text-sm text-danger mt-3">
-            End time is not later than Start time, so Total, Availability, Performance and OEE will stay blank for this entry. (An entry cannot cross midnight.)
+            End time ({fmtTime(form.end_time)}) is earlier than Start time ({fmtTime(form.start_time)}). Did you pick AM instead of PM? Otherwise Total, Availability, Performance and OEE stay blank. (An entry cannot cross midnight.)
           </div>
         )}
         {error && <div className="text-sm text-danger mt-3">{error}</div>}
