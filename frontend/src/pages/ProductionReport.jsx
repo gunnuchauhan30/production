@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
-import { fmtTime } from "../components/TimeInput";
+import { fmtTime, fmtEndTime } from "../components/TimeInput";
 import api from "../api/client";
 
 const LINE_OPTIONS = ["All", "Tube", "Fabrication"];
@@ -171,7 +171,7 @@ export default function ProductionReport() {
                 <td>{e.machine_no || "—"}</td>
                 <td>{e.operator_name || "—"}</td>
                 <td>{fmtTime(e.start_time)}</td>
-                <td>{fmtTime(e.end_time)}</td>
+                <td>{fmtEndTime(e.start_time, e.end_time)}</td>
                 <td>{e.planned_qty ?? "—"}</td>
                 <td>{e.produced_qty ?? "—"}</td>
                 <td>{e.ok_qty ?? "—"}</td>
