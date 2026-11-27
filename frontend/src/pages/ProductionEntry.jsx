@@ -93,6 +93,25 @@ export default function ProductionEntry() {
     }
   };
 
+  // Night shifts: an End earlier than the Start means the next day. Warn when the length looks like an AM/PM slip.
+  const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  let timeNote = null;
+  if (form.start_time && form.end_time) {
+    const s = toMin(form.start_time);
+    const e = toMin(form.end_time);
+    if (e === s) {
+      timeNote = { bad: true, text: "Start and End are the same time, so Total, Availability, Performance and OEE will stay blank." };
+    } else {
+      const mins = e > s ? e - s : e + 1440 - s;
+      const dur = `${Math.floor(mins / 60)} h ${mins % 60} min`;
+      if (mins > 16 * 60) {
+        timeNote = { bad: true, text: `This entry is ${dur} long (${fmtTime(form.start_time)} to ${fmtTime(form.end_time)}). Check AM/PM.` };
+      } else if (e < s) {
+        timeNote = { bad: false, text: `Night shift: ends the next day at ${fmtTime(form.end_time)}. Total time ${dur}.` };
+      }
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -293,11 +312,7 @@ export default function ProductionEntry() {
           </div>
         </div>
 
-        {form.start_time && form.end_time && form.end_time <= form.start_time && (
-          <div className="text-sm text-danger mt-3">
-            End time ({fmtTime(form.end_time)}) is earlier than Start time ({fmtTime(form.start_time)}). Did you pick AM instead of PM? Otherwise Total, Availability, Performance and OEE stay blank. (An entry cannot cross midnight.)
-          </div>
-        )}
+        {timeNote && <div className={`text-sm mt-3 ${timeNote.bad ? "text-danger" : "text-ink-soft"}`}>{timeNote.text}</div>}
         {error && <div className="text-sm text-danger mt-3">{error}</div>}
         {notice && !error && <div className="text-sm text-success mt-3">{notice}</div>}
         <button type="submit" disabled={saving} className="btn-primary mt-4">
