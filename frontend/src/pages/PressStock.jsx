@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
+import { fmtTime } from "../components/TimeInput";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
@@ -27,7 +28,6 @@ const isSunday = (ym, day) => {
   return new Date(y, m - 1, day).getDay() === 0;
 };
 
-const fmtTime = (t) => (t ? t.slice(0, 5) : "—");
 
 export default function PressStock() {
   const { user } = useAuth();
