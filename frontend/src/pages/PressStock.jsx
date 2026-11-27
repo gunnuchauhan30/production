@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
-import { fmtTime } from "../components/TimeInput";
+import { fmtTime, fmtEndTime } from "../components/TimeInput";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
@@ -284,7 +284,7 @@ export default function PressStock() {
               {detailRows.map((e) => (
                 <tr key={e.id}>
                   <td>{fmtTime(e.start_time)}</td>
-                  <td>{fmtTime(e.end_time)}</td>
+                  <td>{fmtEndTime(e.start_time, e.end_time)}</td>
                   <td>{e.part_number}</td>
                   <td>{e.operation_name}</td>
                   <td>{e.bom_item_name || "—"}</td>
