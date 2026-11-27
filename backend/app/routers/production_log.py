@@ -55,12 +55,24 @@ def _to_minutes(t: time) -> int:
     return t.hour * 60 + t.minute
 
 
-def _overlap_minutes(start: time, end: time, win_start: time, win_end: time) -> float:
+def _span_minutes(start: time, end: time) -> Optional[int]:
+    """Length of an entry in minutes. An End earlier than the Start means the shift ran past
+    midnight and ended the next day (night shift). Same Start and End is not a valid entry."""
     s, e = _to_minutes(start), _to_minutes(end)
-    ws, we = _to_minutes(win_start), _to_minutes(win_end)
-    if e <= s:  # shift crossing midnight isn't handled -- treat as 0 overlap
+    if e == s:
+        return None
+    return (e - s) if e > s else (e + 1440 - s)
+
+
+def _overlap_minutes(start: time, end: time, win_start: time, win_end: time) -> float:
+    span = _span_minutes(start, end)
+    if span is None:
         return 0
-    return max(0, min(e, we) - max(s, ws))
+    s = _to_minutes(start)
+    e = s + span                      # may run past 1440 for a night shift
+    ws, we = _to_minutes(win_start), _to_minutes(win_end)
+    # The fixed break windows repeat the next day, so count both days.
+    return sum(max(0, min(e, we + day) - max(s, ws + day)) for day in (0, 1440))
 
 
 def _f(x) -> Optional[float]:
@@ -109,9 +121,10 @@ def _compute_oee_fields(payload: schemas.ProductionLogEntryCreate, db: Session) 
     # Total time + automatic planned down time, from Start/End Time.
     total_min = None
     planned_down = None
-    if payload.start_time and payload.end_time and _to_minutes(payload.end_time) > _to_minutes(payload.start_time):
+    span = _span_minutes(payload.start_time, payload.end_time) if payload.start_time and payload.end_time else None
+    if span is not None:
         s, e = payload.start_time, payload.end_time
-        total_min = _to_minutes(e) - _to_minutes(s)
+        total_min = span
         planned_down = sum(_overlap_minutes(s, e, ws, we) for ws, we in PLANNED_BREAKS)
     out["total_time_min"] = total_min
     out["planned_down_time_min"] = planned_down
@@ -351,3 +364,4 @@ def bulk_delete_entries(
     db.commit()
     return {"deleted": len(found)}
 
+ 
